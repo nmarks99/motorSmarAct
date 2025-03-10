@@ -155,7 +155,7 @@ char cmd[10];
 
 SmarActMCSController::SmarActMCSController(const char *portName, const char *IOPortName, int numAxes, double movingPollPeriod, double idlePollPeriod, int disableSpeed)
 	: asynMotorController(portName, numAxes,
-	                      0, // parameters
+	                      NUM_MCS_PARAMS, // parameters
 	                      0, // interface mask
 	                      0, // interrupt mask
 	                      ASYN_CANBLOCK | ASYN_MULTIDEVICE,
@@ -189,6 +189,9 @@ if (disableSpeed_)
 
 	pasynOctetSyncIO->setInputEos ( asynUserMot_p_, "\n", 1 );
 	pasynOctetSyncIO->setOutputEos( asynUserMot_p_, "\n", 1 );
+
+	createParam(FREQUENCY_STRING, asynParamInt32, &driveFrequencyIndex_);
+	createParam(AMPLITUDE_STRING, asynParamInt32, &driveAmplitudeIndex_);
 
 	// Create axes
 /*	for ( ax=0; ax<numAxes; ax++ ) {
@@ -252,6 +255,46 @@ size_t     got;
 	status = sendCmd(&got, rep, len, DEFLT_TIMEOUT, fmt, ap);
 	va_end(ap);
 	return status;
+}
+
+SmarActMCSAxis *SmarActMCSController::getAxis(asynUser *pasynUser) {
+    return static_cast<SmarActMCSAxis *>(asynMotorController::getAxis(pasynUser));
+}
+
+SmarActMCSAxis *SmarActMCSController::getAxis(int axisNo) {
+    return static_cast<SmarActMCSAxis *>(asynMotorController::getAxis(axisNo));
+}
+
+asynStatus SmarActMCSController::writeInt32(asynUser *pasynUser, epicsInt32 value) {
+	int function = pasynUser->reason;
+	SmarActMCSAxis *pAxis;
+
+	pAxis = getAxis(pasynUser);
+	if (!pAxis) {
+		return asynError;
+	}
+
+	if (function == driveAmplitudeIndex_) {
+		int limitedVal = value;
+		if (value > MAX_AMPLITUDE) {
+			limitedVal = MAX_AMPLITUDE;
+		} else if (value < MIN_AMPLITUDE) {
+			limitedVal = MIN_AMPLITUDE;
+		}
+		pAxis->amplitude_ = limitedVal;
+	} 
+	else if (function == driveFrequencyIndex_) {
+		int limitedVal = value;
+		if (value > MAX_FREQUENCY) {
+			limitedVal = MAX_FREQUENCY;
+		} else if (value < MIN_FREQUENCY) {
+			limitedVal = MIN_FREQUENCY;
+		}
+		pAxis->frequency_ = limitedVal;
+	}
+
+	pAxis->callParamCallbacks();
+	return asynSuccess;
 }
 
 /* Obtain value of the 'motorClosedLoop_' parameter (which
@@ -528,9 +571,9 @@ SmarActMCSAxis::move(double position, int relative, double min_vel, double max_v
 	const char* fmt_lin = relative ? ":MPR%u,%ld,%d" : ":MPA%u,%ld,%d";
 	const char* fmt_step = ":MST%u,%ld,%d,%d"; // open loop move using step count, amplitude (0-4095; 0V-100V), frequency (1-18500 Hz)
 	const char* fmt;
-	const int MAX_FREQ = 18500; // max allowed frequency
-	const int MAX_VOLTAGE = 100; // max voltage 100V
-	const double STEP_PER_VOLT = 4095.0/MAX_VOLTAGE; // max voltage index, 4095=100V
+	// const int MAX_FREQ = 18500; // max allowed frequency
+	// const int MAX_VOLTAGE = 100; // max voltage 100V
+	// const double STEP_PER_VOLT = 4095.0/MAX_VOLTAGE; // max voltage index, 4095=100V
 	double rpos;
 	long angle;
 	int rev;
@@ -584,17 +627,19 @@ SmarActMCSAxis::move(double position, int relative, double min_vel, double max_v
 			// relative move. the position value is the number of steps intended
 			stepCount_ += rpos;
 		}
-		// overload min_vel as amplitude
-		double piezoVoltage = (min_vel > MAX_VOLTAGE) ? (MAX_VOLTAGE) : ((min_vel < 1) ? (1) : (min_vel));
-		int amplitude = piezoVoltage * STEP_PER_VOLT;
-		// overload max_vel as frequency
-		int frequency = (max_vel> MAX_FREQ) ? (MAX_FREQ) : ((max_vel< 1) ? (1) : (max_vel));
+		// // overload min_vel as amplitude
+		// double piezoVoltage = (min_vel > MAX_VOLTAGE) ? (MAX_VOLTAGE) : ((min_vel < 1) ? (1) : (min_vel));
+		// int amplitude = piezoVoltage * STEP_PER_VOLT;
+		// // overload max_vel as frequency
+		// int frequency = (max_vel> MAX_FREQ) ? (MAX_FREQ) : ((max_vel< 1) ? (1) : (max_vel));
 
 #ifdef DEBUG
 		printf("Open loop Step to %ld (piezo voltage %d ,frequency %d)\n", (long)rpos, amplitude, frequency);
 #endif
 		// overload accel as frequency
-		comStatus_ = moveCmd(fmt, channel_, (long)rpos, amplitude, frequency);
+		// use ampltitude and frequency from asyn params
+		epicsPrintf("Commanding move with amplitude=%d, frequency=%d\n", amplitude_, frequency_);
+		comStatus_ = moveCmd(fmt, channel_, (long)rpos, amplitude_, frequency_);
 	}
 bail:
 	if (comStatus_) {

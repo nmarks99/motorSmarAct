@@ -1,0 +1,19 @@
+record(longout, "$(P)$(M):Amplitude") {
+    field(DTYP, "asynInt32")
+    field(PINI, "1")
+    field(VAL, "4095")
+    field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT=1))AMPLITUDE")
+    field(DRVH,"4095")
+    field(DRVL,"0")
+    field(SCAN, "Passive")
+}
+
+record(longout, "$(P)$(M):Frequency") {
+    field(DTYP, "asynInt32")
+    field(PINI, "1")
+    field(VAL, "100")
+    field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT=1))FREQUENCY")
+    field(DRVH,"18500")
+    field(DRVL,"1")
+    field(SCAN, "Passive")
+}

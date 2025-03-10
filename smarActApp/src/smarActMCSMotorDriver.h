@@ -7,6 +7,7 @@
 
 /* Author: Till Straumann <strauman@slac.stanford.edu>, 9/11 */
 
+#include <regex>
 #ifdef __cplusplus
 
 #include <asynMotorController.h>
@@ -19,6 +20,15 @@ enum SmarActMCSExceptionType {
 	MCSConnectionError,
 	MCSCommunicationError,
 };
+
+static constexpr char FREQUENCY_STRING[] = "FREQUENCY";
+static constexpr char AMPLITUDE_STRING[] = "AMPLITUDE";
+constexpr int MIN_AMPLITUDE = 0;
+constexpr int MAX_AMPLITUDE = 4095;
+constexpr int MIN_FREQUENCY = 1;
+constexpr int MAX_FREQUENCY = 18500;
+constexpr int DEFAULT_FREQUENCY = 100;
+constexpr int DEFAULT_AMPLITUDE = MAX_AMPLITUDE;
 
 class SmarActMCSException : public std::exception {
 public:
@@ -69,7 +79,9 @@ private:
 	int                    channel_;
 	int                    sensorType_;
 	int                    isRot_;
-	int					   stepCount_; // open loop current step count
+	int                    stepCount_; // open loop current step count
+	int                    amplitude_ = DEFAULT_AMPLITUDE;
+	int                    frequency_ = DEFAULT_FREQUENCY;
 
 friend class SmarActMCSController;
 };
@@ -83,17 +95,28 @@ public:
 	virtual asynStatus sendCmd(size_t *got_p, char *rep, int len, const char *fmt, ...);
 	virtual asynStatus sendCmd(char *rep, int len, const char *fmt, ...);
 
+	virtual asynStatus writeInt32(asynUser *pasynUser, epicsInt32 value);
+	virtual SmarActMCSAxis *getAxis(asynUser *pasynUser);
+	virtual SmarActMCSAxis *getAxis(int axisNo);
+
 	static int parseReply(const char *reply, int *ax_p, int *val_p);
 	static int parseAngle(const char *reply, int *ax_p, int *val_p, int *rot_p);
 
 protected:
 	SmarActMCSAxis **pAxes_;
 
+#define FIRST_MCS_PARAM driveFrequencyIndex_
+	int driveFrequencyIndex_;
+	int driveAmplitudeIndex_;
+#define LAST_MCS_PARAM driveAmplitudeIndex_
+
 private:
 	asynUser *asynUserMot_p_;
 	int disableSpeed_;
 friend class SmarActMCSAxis;
 };
+
+#define NUM_MCS_PARAMS ((int)(&LAST_MCS_PARAM - &FIRST_MCS_PARAM + 1))
 
 #endif // _cplusplus
 #endif // SMARACT_MCS_MOTOR_DRIVER_H
